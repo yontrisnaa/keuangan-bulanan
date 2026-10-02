@@ -1,0 +1,48 @@
+name: Deploy to GitHub Pages
+
+# Deploy otomatis setiap ada push ke main. Tidak ada build step: index.html
+# sudah self-contained (semua aset dari CDN), jadi yang diunggah hanya berkas
+# yang benar-benar dibutuhkan halaman.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Satu deploy berjalan pada satu waktu. Job yang sedang berjalan tidak
+# dibatalkan karena Pages menolak menimpa deployment yang belum selesai.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Hanya index.html dan .nojekyll yang ditayangkan. Berkas test, schema
+      # database, dan kode backend sengaja tidak ikut: repository ini publik,
+      # dan tidak perlu membocorkan struktur internal lewat URL yang ditebak.
+      - name: Siapkan situs
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp .nojekyll _site/
+
+      - name: Unggah artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+      - name: Deploy ke GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
