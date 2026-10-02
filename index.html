@@ -1,0 +1,1582 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aplikasi Keuangan Bulanan</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root{
+    --bg:#f8fafc; --card:#fff; --border:#e2e8f0; --muted:#64748b;
+    --emerald:#10b981; --rose:#ef4444; --amber:#f59e0b; --blue:#3b82f6; --violet:#8b5cf6;
+  }
+  body{background:var(--bg)}
+  .card{background:var(--card);border:1px solid var(--border)}
+  .focus-ring:focus{outline:none;box-shadow:0 0 0 2px rgba(16,185,129,.35);border-color:transparent}
+  .toast-in{animation:slideIn .25s ease}
+  @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .modal-in{animation:popIn .18s ease}
+  @keyframes popIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+  .bar{transition:width .3s ease,background .3s ease}
+  tr.locked-row{opacity:.72}
+  .tab-active{box-shadow:inset 0 -2px 0 currentColor}
+</style>
+</head>
+<body class="min-h-screen p-3 md:p-5">
+
+<!-- ============ HEADER ============ -->
+<header class="mb-5 flex flex-wrap items-center justify-between gap-3">
+  <div class="flex items-center gap-2">
+    <i class="fas fa-coins text-emerald-600 text-2xl"></i>
+    <div>
+      <h1 class="text-lg md:text-xl font-bold text-slate-800 leading-tight">Aplikasi Keuangan</h1>
+      <div id="syncBadge" class="text-[11px] text-slate-400 hidden"></div>
+    </div>
+  </div>
+  <div class="flex items-center gap-2 flex-wrap">
+    <label for="periodFilter" class="sr-only">Pilih periode</label>
+    <select id="periodFilter" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus-ring"></select>
+    <button id="syncBtn" title="Sinkronkan dengan database" class="rounded-lg border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50">
+      <i class="fas fa-sync-alt text-slate-500"></i>
+    </button>
+    <button id="archiveBtn" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
+      <i class="fas fa-box-archive text-slate-500"></i> <span class="hidden sm:inline">Arsip</span>
+    </button>
+    <button id="settingsBtn" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-50">
+      <i class="fas fa-cog mr-1 text-slate-500"></i>Setel
+    </button>
+  </div>
+</header>
+
+<!-- ============ STAT CARDS ============ -->
+<section aria-label="Ringkasan" class="mb-5">
+  <div id="statCards" class="grid grid-cols-2 lg:grid-cols-5 gap-3"></div>
+</section>
+
+<!-- ============ OWNER SUMMARY ============ -->
+<section aria-labelledby="ownerSumTitle" class="mb-5">
+  <div class="mb-2 flex items-end justify-between gap-3 flex-wrap">
+    <div>
+      <h2 id="ownerSumTitle" class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ringkasan Pengeluaran per Pemilik</h2>
+      <p id="ownerSumSub" class="text-[11px] text-slate-400 mt-0.5"></p>
+    </div>
+    <button id="manageOwnersBtn" class="text-xs text-emerald-600 hover:text-emerald-700">
+      <i class="fas fa-user-pen mr-1"></i>Kelola Pemilik
+    </button>
+  </div>
+  <div id="ownerCards" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3"></div>
+</section>
+
+<!-- ============ MAIN ============ -->
+<main class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+
+  <!-- Form -->
+  <section>
+    <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Input Transaksi</h2>
+    <div class="card rounded-2xl p-4">
+      <div class="flex gap-2 mb-4" role="tablist">
+        <button id="tabExpense" role="tab" class="flex-1 rounded-lg px-3 py-2 text-sm font-medium border transition-colors">Pengeluaran</button>
+        <button id="tabIncome" role="tab" class="flex-1 rounded-lg px-3 py-2 text-sm font-medium border transition-colors">Pemasukan</button>
+      </div>
+      <div class="grid gap-3">
+        <input id="txDesc" type="text" maxlength="120" placeholder="Deskripsi transaksi..."
+               class="rounded-lg border border-slate-300 px-3 py-2 focus-ring w-full">
+        <div class="flex gap-3 items-center">
+          <span id="txSign" class="text-lg font-bold w-7 text-center text-rose-500">−</span>
+          <input id="txAmount" type="number" step="500" min="0" placeholder="Nominal (Rp)"
+                 class="rounded-lg border border-slate-300 px-3 py-2 focus-ring flex-1">
+        </div>
+        <input id="txDate" type="date" class="rounded-lg border border-slate-300 px-3 py-2 focus-ring w-full">
+        <select id="txCategory" class="rounded-lg border border-slate-300 px-3 py-2 focus-ring w-full"></select>
+        <div id="txOwnerWrap">
+          <label for="txOwner" class="text-xs font-medium text-slate-500">Pengeluaran untuk</label>
+          <select id="txOwner" class="mt-1 rounded-lg border border-slate-300 px-3 py-2 focus-ring w-full"></select>
+        </div>
+        <button id="addTxBtn" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white font-medium hover:bg-emerald-700">
+          <i class="fas fa-plus mr-1"></i>Tambahkan
+        </button>
+        <p id="txImpact" class="text-[11px] text-slate-400"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Budget + Scan -->
+  <section class="space-y-4">
+    <div>
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Batas Anggaran <span id="budgetPeriodLabel" class="normal-case tracking-normal font-normal text-slate-400"></span></h2>
+      <div class="card rounded-2xl p-4">
+        <div class="flex gap-2 mb-3">
+          <input id="budgetInput" type="number" step="100000" min="0" placeholder="Nominal anggaran (Rp)"
+                 class="rounded-lg border border-slate-300 px-3 py-2 focus-ring flex-1">
+          <button id="saveBudgetBtn" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white font-medium hover:bg-emerald-700">Simpan</button>
+        </div>
+        <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+          <div id="budgetBar" class="bar h-full rounded-full" style="width:0%;background:var(--emerald)"></div>
+        </div>
+        <p id="budgetText" class="text-[11px] text-slate-500 mt-1.5"></p>
+        <p id="budgetWarn" class="hidden text-[11px] text-rose-500 mt-1"></p>
+        <button id="setBudgetTemplateBtn" class="hidden mt-2 text-[11px] text-emerald-600 hover:underline">
+          Jadikan default bulan depan
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">AI Scan Resi</h2>
+      <div class="card rounded-2xl p-4">
+        <input type="file" id="resiUpload" accept="image/png,image/jpeg,image/webp" class="hidden">
+        <div id="dropArea" class="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center hover:border-emerald-500 cursor-pointer transition-colors">
+          <div class="text-sm text-slate-600 mb-1">Seret foto resi ke sini</div>
+          <div class="text-[11px] text-slate-400">PNG / JPG / WEBP, maks 4 MB</div>
+          <i class="fas fa-cloud-arrow-up text-slate-300 text-2xl mt-1"></i>
+        </div>
+        <div id="scanStatus" class="mt-3 hidden"></div>
+        <div id="scanResult" class="mt-3 hidden"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Charts -->
+  <section class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="card rounded-2xl p-4">
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Distribusi Pengeluaran per Kategori</h2>
+      <canvas id="doughnutChart" height="190"></canvas>
+    </div>
+    <div class="card rounded-2xl p-4">
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Pemasukan vs Pengeluaran (6 Bulan)</h2>
+      <canvas id="barChart" height="190"></canvas>
+    </div>
+  </section>
+</main>
+
+<!-- ============ TRANSACTION TABLE ============ -->
+<section class="mt-5 card rounded-2xl overflow-hidden">
+  <div class="p-3 md:p-4 border-b border-slate-200 flex flex-wrap gap-2 items-center">
+    <input id="searchInput" type="text" placeholder="Cari deskripsi..."
+           class="rounded-lg border border-slate-300 px-3 py-2 flex-1 min-w-[150px] focus-ring text-sm">
+    <select id="ownerFilter" class="rounded-lg border border-slate-300 px-3 py-2 text-sm"></select>
+    <select id="categoryFilter" class="rounded-lg border border-slate-300 px-3 py-2 text-sm"></select>
+    <button id="exportBtn" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600 hover:bg-emerald-100">
+      <i class="fas fa-download mr-1"></i>JSON
+    </button>
+    <button id="csvBtn" class="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100">
+      <i class="fas fa-file-csv mr-1"></i>CSV
+    </button>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="min-w-full">
+      <thead>
+        <tr class="border-b border-slate-200 bg-slate-50">
+          <th class="text-left py-2.5 px-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Tanggal</th>
+          <th class="text-left py-2.5 px-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Deskripsi</th>
+          <th class="text-left py-2.5 px-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider hidden md:table-cell">Kategori</th>
+          <th class="text-left py-2.5 px-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Pemilik</th>
+          <th class="text-left py-2.5 px-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider hidden sm:table-cell">Sumber</th>
+          <th class="text-right py-2.5 px-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Nominal</th>
+          <th class="text-right py-2.5 px-3"></th>
+        </tr>
+      </thead>
+      <tbody id="txBody"></tbody>
+    </table>
+  </div>
+  <p id="tableEmpty" class="hidden py-8 text-center text-sm text-slate-400"></p>
+</section>
+
+<!-- ============ ARCHIVE PANEL ============ -->
+<section id="archivePanel" class="mt-5 hidden">
+  <div class="card rounded-2xl p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Arsip &amp; Riwayat Bulanan</h2>
+      <button id="closeArchiveBtn" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div>
+        <h3 class="text-[11px] text-slate-400 uppercase tracking-wider mb-2">Tren Saldo Akhir</h3>
+        <canvas id="trendChart" height="170"></canvas>
+      </div>
+      <div id="periodList" class="space-y-2 max-h-[340px] overflow-y-auto"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MODALS ============ -->
+<div id="settingsModal" class="fixed inset-0 hidden items-center justify-center z-50 p-4" style="background:rgba(0,0,0,.45)">
+  <div class="modal-in bg-white rounded-2xl p-5 w-full max-w-md max-h-[88vh] overflow-y-auto">
+    <h2 class="text-lg font-bold text-slate-800 mb-4">Pengaturan</h2>
+    <div class="space-y-4">
+      <div>
+        <label for="apiUrlInput" class="text-sm text-slate-600">URL Database (opsional)</label>
+        <input id="apiUrlInput" type="text" class="mt-1 rounded-lg border border-slate-300 px-3 py-2 focus-ring w-full" placeholder="https://.../api/sync">
+        <p class="text-[11px] text-slate-400 mt-1">Kosongkan untuk memakai mode lokal saja (default).</p>
+      </div>
+      <div>
+        <label for="apiKeyInput" type="password" class="text-sm text-slate-600">API Key Gemini (opsional)</label>
+        <input id="apiKeyInput" type="password" class="mt-1 rounded-lg border border-slate-300 px-3 py-2 focus-ring w-full" placeholder="AIza...">
+      </div>
+      <div>
+        <label for="purgeKeepInput" class="text-sm text-slate-600">Simpan arsip selama (bulan)</label>
+        <input id="purgeKeepInput" type="number" min="1" max="120" class="mt-1 rounded-lg border border-slate-300 px-3 py-2 focus-ring w-full">
+      </div>
+      <div class="flex gap-2">
+        <button id="importBtn" class="flex-1 rounded-lg bg-slate-50 px-3 py-2 text-sm hover:bg-slate-100">Impor JSON</button>
+        <input type="file" id="importFile" accept="application/json" class="hidden">
+      </div>
+      <button id="loadSampleBtn" class="w-full rounded-lg bg-slate-50 px-4 py-2 text-sm hover:bg-slate-100">Muat Data Contoh</button>
+      <button id="resetDataBtn" class="w-full rounded-lg bg-rose-50 px-4 py-2 text-sm text-rose-600 hover:bg-rose-100">Reset Semua Data</button>
+    </div>
+    <button id="closeSettingsBtn" class="mt-4 w-full rounded-lg border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50">Tutup</button>
+  </div>
+</div>
+
+<!-- Owners modal -->
+<div id="ownersModal" class="fixed inset-0 hidden items-center justify-center z-50 p-4" style="background:rgba(0,0,0,.45)">
+  <div class="modal-in bg-white rounded-2xl p-5 w-full max-w-md">
+    <h2 class="text-lg font-bold text-slate-800 mb-1">Pemilik Pengeluaran</h2>
+    <p class="text-[11px] text-slate-400 mb-4">Urutan menentukan urutan tampilan. Mengubah daftar ini tidak mengubah saldo.</p>
+    <div id="ownerChips" class="space-y-2 mb-4"></div>
+    <div class="flex gap-2">
+      <input id="newOwnerInput" type="text" maxlength="24" placeholder="Nama pemilik baru..."
+             class="rounded-lg border border-slate-300 px-3 py-2 focus-ring flex-1">
+      <button id="addOwnerBtn" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white font-medium hover:bg-emerald-700">Tambah</button>
+    </div>
+    <button id="closeOwnersBtn" class="mt-4 w-full rounded-lg border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50">Tutup</button>
+  </div>
+</div>
+
+<!-- Rollover modal -->
+<div id="rolloverModal" class="fixed inset-0 hidden items-center justify-center z-50 p-4" style="background:rgba(0,0,0,.45)">
+  <div class="modal-in bg-white rounded-2xl p-5 w-full max-w-md">
+    <div class="flex items-center gap-2 mb-3">
+      <i class="fas fa-calendar-check text-emerald-600 text-xl"></i>
+      <h2 class="text-lg font-bold text-slate-800" id="rolloverTitle"></h2>
+    </div>
+    <p class="text-sm text-slate-600 mb-4">Data transaksi bulan lalu sudah diarsipkan. Daftar transaksi bulan ini kosong dan siap diisi dari nol.</p>
+    <div class="card rounded-xl p-3 mb-3 space-y-1.5">
+      <div class="flex justify-between text-sm"><span class="text-slate-500">Saldo akhir bulan lalu</span><span id="rollPrev" class="font-semibold"></span></div>
+      <div class="flex justify-between text-sm"><span class="text-slate-500">Sisa bulan lalu (dipakai)</span><span id="rollCarry" class="font-semibold text-emerald-600"></span></div>
+    </div>
+    <label for="rolloverAwal" class="text-xs text-slate-500">Saldo awal bulan ini (bisa dikoreksi)</label>
+    <input id="rolloverAwal" type="number" class="mt-1 rounded-lg border border-slate-300 px-3 py-2 focus-ring w-full">
+    <div class="flex gap-2 mt-4">
+      <button id="rolloverOkBtn" class="flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white font-medium hover:bg-emerald-700">Saya paham, lanjut</button>
+    </div>
+  </div>
+</div>
+
+<!-- Archive-fix modal -->
+<div id="fixModal" class="fixed inset-0 hidden items-center justify-center z-50 p-4" style="background:rgba(0,0,0,.45)">
+  <div class="modal-in bg-white rounded-2xl p-5 w-full max-w-md max-h-[88vh] overflow-y-auto">
+    <div class="flex items-start justify-between mb-3">
+      <div>
+        <h2 class="text-lg font-bold text-slate-800">Perbaiki Arsip</h2>
+        <p class="text-[11px] text-slate-400">Menyimpan perubahan akan menyesuaikan saldo semua periode berikutnya.</p>
+      </div>
+      <button id="closeFixBtn" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="fixBody" class="space-y-2"></div>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div id="confirmModal" class="fixed inset-0 hidden items-center justify-center z-[60] p-4" style="background:rgba(0,0,0,.5)">
+  <div class="modal-in bg-white rounded-2xl p-5 w-full max-w-sm">
+    <h3 id="confirmTitle" class="font-bold text-slate-800 mb-2"></h3>
+    <p id="confirmBody" class="text-sm text-slate-600 mb-4"></p>
+    <div class="flex gap-2">
+      <button id="confirmNo" class="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50">Batal</button>
+      <button id="confirmYes" class="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-sm text-white font-medium hover:bg-rose-700">Ya, lanjut</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" class="fixed bottom-4 right-4 flex flex-col gap-2 z-[70] items-end"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   1. KONFIGURASI
+   ===================================================================== */
+const LS = {
+  activePeriod:'fin_active_period', periods:'fin_periods', archived:'fin_archived_tx',
+  owners:'fin_owners', transactions:'finance_transactions',
+  budgetTemplate:'fin_budget_template', purgeKeep:'fin_purge_keep',
+  apiKey:'finance_apiKey', apiUrl:'finance_apiUrl',
+  txType:'fin_tx_type'
+};
+const CAT_EXP = ['Makanan & Minuman','Belanja & Groceries','Transportasi','Tagihan & Utilitas','Hiburan & Gaya Hidup','Kesehatan','Lainnya'];
+const CAT_INC = ['Gaji & Utama','Bonus & Sampingan'];
+const DEFAULT_OWNERS = ['Kamek','Mamak','Kucing'];
+const MONTHS = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+const OWNER_PALETTE = [
+  {c:'text-emerald-600',bg:'bg-emerald-50'},
+  {c:'text-blue-600',bg:'bg-blue-50'},
+  {c:'text-violet-600',bg:'bg-violet-50'},
+  {c:'text-amber-600',bg:'bg-amber-50'},
+  {c:'text-rose-600',bg:'bg-rose-50'},
+  {c:'text-cyan-600',bg:'bg-cyan-50'},
+];
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+
+/* =====================================================================
+   2. UTILITAS
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const readLS = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const writeLS = (k,v) => { try { localStorage.setItem(k,v); return true; } catch { toast('Penyimpanan penuh — data lama tetap utuh','error'); return false; } };
+const readJSON = (k,fb) => { try { const v = readLS(k); return v ? JSON.parse(v) : fb; } catch { return fb; } };
+const writeJSON = (k,v) => writeLS(k, JSON.stringify(v));
+const fmt = n => (Number(n)||0).toLocaleString('id-ID');
+const rp = n => 'Rp ' + fmt(Math.abs(Number(n)||0));
+const uid = () => 'tx_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+
+function periodLabel(p){
+  const [y,m] = String(p).split('-');
+  return (MONTHS[Number(m)-1]||'?') + ' ' + y;
+}
+/* Tanggal LOKAL, bukan UTC. toISOString() akan melenceng di WIB (UTC+7). */
+function todayISO(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function nowPeriod(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+}
+function nextPeriod(p){
+  const [y,m] = String(p).split('-').map(Number);
+  return m === 12 ? (y+1) + '-01' : y + '-' + String(m+1).padStart(2,'0');
+}
+function lastDayOf(p){
+  const [y,m] = String(p).split('-').map(Number);
+  return new Date(y, m, 0).getDate();   // hari 0 bulan m+1 = tanggal terakhir bulan m
+}
+function shiftMonths(p, delta){
+  const [y,m] = String(p).split('-').map(Number);
+  const d = new Date(y, m-1+delta, 1);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+}
+
+/* =====================================================================
+   3. STATE
+   ===================================================================== */
+const state = {
+  periods: [], activePeriod: null, transactions: [], archived: [],
+  viewPeriod: null, owners: [...DEFAULT_OWNERS], budgetTemplate: 0,
+  purgeKeep: 12, apiKey: '', apiUrl: '', txType: 'pengeluaran',
+  fixPeriod: null, pending: null
+};
+
+/* =====================================================================
+   4. OWNERS  (F-15)
+   ===================================================================== */
+function getOwners(){
+  const raw = readJSON(LS.owners, null);
+  return Array.isArray(raw) && raw.length ? raw : [...DEFAULT_OWNERS];
+}
+function normalizeOwner(name){
+  const s = String(name || '').trim();
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function isKnownOwner(name){
+  const n = String(name || '').toLowerCase();
+  return getOwners().some(o => o.toLowerCase() === n);
+}
+function ownerColor(name){
+  const cached = readJSON('fin_owner_colors', {});
+  if (cached[name]) return OWNER_PALETTE[cached[name] % OWNER_PALETTE.length];
+  const idx = getOwners().indexOf(name);
+  const i = idx >= 0 ? idx : getOwners().length;
+  cached[name] = i;
+  writeJSON('fin_owner_colors', cached);
+  return OWNER_PALETTE[i % OWNER_PALETTE.length];
+}
+function persistOwners(){ writeJSON(LS.owners, state.owners); }
+
+/* =====================================================================
+   5. PERIODE & SALDO  (§5)
+   ===================================================================== */
+/* WAJIB mencari di dua store. Versi yang menyeleksi store lewat
+   perbandingan `period === activePeriod` menghasilkan carry-over 0. */
+function allTransactionsFor(period){
+  return state.transactions.concat(state.archived).filter(t => t.period === period);
+}
+function totalBy(period, type){
+  return allTransactionsFor(period).filter(t => t.type === type)
+    .reduce((s,t) => s + (Number(t.amount)||0), 0);
+}
+function saldoAkhir(period){
+  const p = state.periods.find(x => x.period === period);
+  if (!p) return 0;
+  return p.saldoAwal + totalBy(period,'pemasukan') - totalBy(period,'pengeluaran');
+}
+function periodRec(period){ return state.periods.find(x => x.period === period); }
+function sortedPeriods(){
+  return state.periods.slice().sort((a,b) => a.period.localeCompare(b.period));
+}
+function newPeriod(period, saldoAwal){
+  return { period, label: periodLabel(period), saldoAwal: Number(saldoAwal)||0,
+           budget: Number(state.budgetTemplate)||0, isArchived:false,
+           closedAt:null, txCount:0, catatan:'' };
+}
+function archiveTransactionsOf(period){
+  const moving = state.transactions.filter(t => t.period === period);
+  state.archived.push(...moving);
+  state.transactions = state.transactions.filter(t => t.period !== period);
+}
+function closePeriodRecord(p){
+  p.txCount = allTransactionsFor(p.period).length;   // hitung SEBELUM dipindah
+  p.isArchived = true;
+  p.closedAt = new Date().toISOString();
+  archiveTransactionsOf(p.period);
+  applyPurgePolicy();
+}
+function applyPurgePolicy(){
+  const closed = sortedPeriods().filter(p => p.isArchived);
+  if (closed.length <= state.purgeKeep) return;
+  const drop = new Set(closed.slice(0, closed.length - state.purgeKeep).map(p => p.period));
+  if (!drop.size) return;
+  state.periods = state.periods.filter(p => !drop.has(p.period));
+  state.archived = state.archived.filter(t => !drop.has(t.period));
+}
+function ensurePeriod(){
+  const target = nowPeriod();
+  if (state.activePeriod === target && periodRec(target)) return false;
+
+  for (const p of state.periods){
+    if (p.period < target && !p.isArchived) closePeriodRecord(p);
+  }
+  let prev = sortedPeriods().filter(p => p.period < target).pop();
+  if (prev){
+    for (let cur = nextPeriod(prev.period); cur < target; cur = nextPeriod(cur)){
+      state.periods.push(newPeriod(cur, saldoAkhir(prev.period)));
+      prev = periodRec(cur);
+    }
+  }
+  const carry = prev ? saldoAkhir(prev.period) : 0;
+  state.periods.push(newPeriod(target, carry));
+  state.activePeriod = target;
+  state.viewPeriod = null;
+  /* Periode aktif berpindah -> min/max dan nilai #txDate wajib ikut.
+     Kalau tidak, tanggal form tertinggal di bulan lama dan validateDate()
+     mengembalikan PAST sehingga transaksi pengguna masuk ke dialog arsip. */
+  bindDateBounds();
+  persistAll();
+  return carry;
+}
+function recomputeChainFrom(start){
+  const list = sortedPeriods().filter(p => p.period >= start);
+  const prev = sortedPeriods().filter(p => p.period < start).pop();
+  /* Periode pertama tidak punya pendahulu: saldoAwal-nya adalah JANGKAR yang
+     ditetapkan pengguna (modal rollover / penyesuaian manual), bukan turunan,
+     jadi TIDAK boleh ditimpa. Tapi jangkar itu tetap harus jadi titik awal
+     cascade — kalau kita `return` di sini, periode kedua dan seterusnya
+     mempertahankan saldoAwal hasil impor apa adanya (bisa disamarkan). */
+  let carry = prev ? saldoAkhir(prev.period) : (list[0] ? Number(list[0].saldoAwal) || 0 : 0);
+  for (const p of list){
+    p.saldoAwal = carry;
+    carry = saldoAkhir(p.period);
+  }
+  persistAll();
+}
+function manualClosePeriod(){
+  const p = periodRec(state.activePeriod);
+  if (!p) return;
+  const carry = saldoAkhir(state.activePeriod);
+  closePeriodRecord(p);
+  const next = nextPeriod(state.activePeriod);
+  state.periods.push(newPeriod(next, carry));
+  state.activePeriod = next;
+  state.viewPeriod = null;
+  bindDateBounds();
+  persistAll();
+  renderAll();
+  toast('Bulan ' + p.label + ' ditutup. Saldo ' + rp(carry) + ' dibawa ke ' + periodLabel(next));
+}
+function adjustOpeningBalance(period, value){
+  const p = periodRec(period);
+  if (!p || p.isArchived) return;
+  p.saldoAwal = Number(value) || 0;
+  persistAll();
+  renderAll();
+}
+
+/* =====================================================================
+   6. PERSISTENSI
+   ===================================================================== */
+function persistAll(){
+  writeJSON(LS.periods, state.periods);
+  writeJSON(LS.archived, state.archived);
+  writeJSON(LS.transactions, state.transactions);
+  writeJSON(LS.owners, state.owners);
+  writeLS(LS.activePeriod, state.activePeriod || '');
+  writeLS(LS.budgetTemplate, String(state.budgetTemplate));
+  writeLS(LS.purgeKeep, String(state.purgeKeep));
+}
+function loadState(){
+  state.periods = readJSON(LS.periods, []);
+  state.archived = readJSON(LS.archived, []);
+  state.transactions = readJSON(LS.transactions, []);
+  const o = readJSON(LS.owners, null);
+  state.owners = Array.isArray(o) && o.length ? o : [...DEFAULT_OWNERS];
+  state.budgetTemplate = Number(readLS(LS.budgetTemplate)) || 0;
+  state.purgeKeep = Math.max(1, Number(readLS(LS.purgeKeep)) || 12);
+  state.apiKey = readLS(LS.apiKey) || '';
+  state.apiUrl  = readLS(LS.apiUrl)  || '';
+  state.activePeriod = readLS(LS.activePeriod) || null;
+  state.txType = readLS(LS.txType) === 'pemasukan' ? 'pemasukan' : 'pengeluaran';
+  // normalisasi field agar tidak crash
+  state.periods = (Array.isArray(state.periods) ? state.periods : []).map(p => ({
+    period: p.period, label: p.label || periodLabel(p.period),
+    saldoAwal: Number(p.saldoAwal)||0, budget: Number(p.budget)||0,
+    isArchived: !!p.isArchived, closedAt: p.closedAt || null,
+    txCount: Number(p.txCount)||0, catatan: p.catatan || ''
+  }));
+  state.archived = (Array.isArray(state.archived) ? state.archived : []).filter(t => t && t.period);
+  state.transactions = (Array.isArray(state.transactions) ? state.transactions : []).filter(t => t && t.period);
+}
+
+/* =====================================================================
+   7. TRANSAKSI
+   ===================================================================== */
+function validateDate(dateStr){
+  const p = String(dateStr || '').slice(0,7);
+  if (!p) return { ok:false, code:'EMPTY', message:'Tanggal wajib diisi' };
+  if (p === state.activePeriod) return { ok:true };
+  if (p < state.activePeriod)
+    return { ok:false, code:'PAST', message:'Periode ' + periodLabel(p) + ' sudah ditutup. Gunakan "Perbaiki Arsip" untuk mencatat di bulan lalu.' };
+  return { ok:false, code:'FUTURE', message:'Bulan ' + periodLabel(p) + ' belum dibuka. Tidak bisa mencatat transaksi untuk bulan depan.' };
+}
+function addTransaction(t){
+  t.id = t.id || uid();
+  t.amount = Number(t.amount) || 0;
+  t.date = String(t.date || '').slice(0,10);
+  t.period = t.date.slice(0,7);
+  if (t.type === 'pemasukan') t.owner = '';
+  state.transactions.push(t);
+  persistAll();
+  renderAll();
+  return t;
+}
+function deleteTransaction(id){
+  const inActive = state.transactions.some(t => t.id === id);
+  const list = inActive ? state.transactions : state.archived;
+  const t = list.find(x => x.id === id);
+  if (!t) return;
+  if (t.locked) return toast('Transaksi ini dikunci (void) dan tidak bisa dihapus','error');
+  if (inActive){
+    confirmDialog('Hapus transaksi ini?','Saldo bulan ini AKAN BERUBAH karena transaksi dihapus.', () => {
+      state.transactions = state.transactions.filter(x => x.id !== id);
+      persistAll(); renderAll(); toast('Transaksi dihapus');
+    });
+  } else {
+    const period = t.period;
+    confirmDialog('Hapus transaksi arsip ini?','Saldo ' + periodLabel(period) + ' dan semua periode setelahnya akan disesuaikan.', () => {
+      state.archived = state.archived.filter(x => x.id !== id);
+      recomputeChainFrom(period);
+      renderAll(); toast('Arsip diperbarui, saldo bulan berikutnya disesuaikan');
+    });
+  }
+}
+function voidTransaction(id){
+  const t = state.transactions.find(x => x.id === id);
+  if (!t) return;
+  confirmDialog('Batalkan transaksi ini?','Transaksi tidak dihapus, ditandai void agar tetap dapat diaudit.', () => {
+    t.type = t.type === 'pemasukan' ? 'pengeluaran' : 'pemasukan';
+    t.locked = true;
+    t.catatan = 'VOID oleh ' + todayISO();
+    persistAll(); renderAll(); toast('Transaksi dibatalkan (void)','warning');
+  });
+}
+
+/* =====================================================================
+   8. UI: TOAST, KONFIRMASI, MODAL
+   ===================================================================== */
+function toast(msg, type='info'){
+  const map = {
+    success:['bg-emerald-500 text-white','fa-check'],
+    error:['bg-rose-500 text-white','fa-exclamation-circle'],
+    warning:['bg-amber-500 text-white','fa-triangle-exclamation'],
+    info:['bg-slate-700 text-white','fa-info-circle']
+  };
+  const [cls,icon] = map[type] || map.info;
+  const el = document.createElement('div');
+  el.className = 'toast-in rounded-lg px-4 py-2 text-sm flex items-center gap-2 shadow-lg max-w-[90vw] ' + cls;
+  el.innerHTML = '<i class="fas ' + icon + '"></i><span>' + esc(msg) + '</span>';
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3600);
+}
+let confirmCb = null;
+function confirmDialog(title, body, cb){
+  $('#confirmTitle').textContent = title;
+  $('#confirmBody').textContent = body;
+  confirmCb = cb;
+  $('#confirmModal').classList.remove('hidden');
+  $('#confirmModal').classList.add('flex');
+}
+function closeConfirm(){
+  $('#confirmModal').classList.add('hidden');
+  $('#confirmModal').classList.remove('flex');
+  confirmCb = null;
+}
+function openModal(sel){ const m = $(sel); m.classList.remove('hidden'); m.classList.add('flex'); }
+function closeModal(sel){ const m = $(sel); m.classList.add('hidden'); m.classList.remove('flex'); }
+
+/* =====================================================================
+   9. RENDER
+   ===================================================================== */
+function viewedPeriod(){ return state.viewPeriod || state.activePeriod; }
+function isViewingArchive(){ return !!state.viewPeriod && state.viewPeriod !== state.activePeriod; }
+function isAllArchive(){ return state.viewPeriod === 'all'; }
+/* "Semua Arsip" adalah mode agregat: bukan satu periode, jadi tidak punya
+   rec/saldoAwal sendiri. Semua render wajib lewat helper ini, bukan
+   allTransactionsFor(period) — kalau tidak, hasilnya selalu kosong. */
+function viewedLabel(){ return isAllArchive() ? 'semua arsip' : periodLabel(viewedPeriod()); }
+function viewedTransactions(){
+  return isAllArchive()
+    ? state.transactions.concat(state.archived)
+    : allTransactionsFor(viewedPeriod());
+}
+function budgetTotalOf(list){
+  return list.reduce((s,p) => s + (Number(p.budget)||0), 0);
+}
+
+function renderAll(){
+  renderPeriodFilter();
+  renderStats();
+  renderOwnerSummary();
+  renderBudget();
+  renderTable();
+  renderCharts();
+  renderImpact();
+}
+
+function renderPeriodFilter(){
+  const sel = $('#periodFilter');
+  const cur = sel.value;
+  sel.innerHTML = '';
+  const active = periodRec(state.activePeriod);
+  const oa = document.createElement('option');
+  oa.value = 'active';
+  oa.textContent = (active ? active.label : nowPeriod()) + ' ●';
+  sel.appendChild(oa);
+  sortedPeriods().filter(p => p.period !== state.activePeriod).reverse().forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.period;
+    o.textContent = p.label + (p.period > state.activePeriod ? ' (belum)' : ' (' + allTransactionsFor(p.period).length + ')');
+    sel.appendChild(o);
+  });
+  const all = document.createElement('option');
+  all.value = 'all';
+  all.textContent = 'Semua Arsip';
+  sel.appendChild(all);
+  sel.value = cur && [...sel.options].some(o => o.value === cur)
+    ? cur
+    : (isViewingArchive() ? state.viewPeriod : 'active');
+}
+
+function renderStats(){
+  const period = viewedPeriod();
+  const archived = isViewingArchive();
+  const all = isAllArchive();
+  const list = sortedPeriods();
+  const rec = all ? null : periodRec(period);
+  const sumType = type => state.transactions.concat(state.archived)
+    .filter(t => t.type === type).reduce((s,t) => s + (Number(t.amount)||0), 0);
+  const inc = all ? sumType('pemasukan') : totalBy(period,'pemasukan');
+  const exp = all ? sumType('pengeluaran') : totalBy(period,'pengeluaran');
+  const opening = all ? (list.length ? list[0].saldoAwal : 0) : (rec ? rec.saldoAwal : 0);
+  const closing = all ? (list.length ? saldoAkhir(list[list.length-1].period) : 0) : saldoAkhir(period);
+  const prevRec = all ? null : list.filter(p => p.period < period).pop();
+  const scope = viewedLabel();
+  const income = inc > 0 ? Math.round(exp/inc*100) : 0;
+
+  const card = (icon, iconColor, value, valueColor, label, sub) =>
+    '<div class="card rounded-2xl p-3.5 hover:shadow-md transition-shadow">' +
+      '<i class="fas ' + icon + ' ' + iconColor + ' mb-1.5"></i>' +
+      '<div class="text-lg md:text-xl font-bold ' + valueColor + '">' + value + '</div>' +
+      '<div class="text-[11px] text-slate-500 mt-0.5">' + label + '</div>' +
+      (sub ? '<div class="text-[10px] text-slate-400 mt-0.5">' + sub + '</div>' : '') +
+    '</div>';
+
+  const budgetShown = all ? budgetTotalOf(list) : (rec ? rec.budget : 0);
+  $('#statCards').innerHTML =
+    card('fa-door-open','fa-solid text-slate-400', rp(opening), 'text-slate-700',
+         'Saldo Awal', all ? 'bulan ' + (list[0] ? list[0].label : '-')
+                           : (prevRec ? 'dari ' + prevRec.label : 'bulan pertama')) +
+    card('fa-arrow-up','text-emerald-500', rp(inc), 'text-emerald-600', 'Pemasukan', scope) +
+    card('fa-arrow-down','text-rose-500', rp(exp), 'text-rose-500',
+         'Pengeluaran', inc > 0 ? income + '% dari pemasukan' : '') +
+    card('fa-wallet','text-slate-400',
+         (closing < 0 ? '−' : '') + rp(closing),
+         closing >= 0 ? 'text-emerald-600' : 'text-rose-600',
+         (archived || all) ? 'Saldo Akhir' : 'Sisa Saldo',
+         (archived || all) ? scope : '→ dibawa ke bulan depan') +
+    card('fa-bullseye','text-emerald-500',
+         budgetShown > 0 ? rp(budgetShown) : 'Belum diset', 'text-emerald-600',
+         'Batas Anggaran', scope);
+}
+
+function renderOwnerSummary(){
+  const exp = viewedTransactions().filter(t => t.type === 'pengeluaran');
+  const rows = getOwners().map(o => ({
+    label:o, amount: exp.filter(t => isKnownOwner(t.owner) && String(t.owner).toLowerCase() === o.toLowerCase())
+      .reduce((s,t) => s + (Number(t.amount)||0), 0)
+  }));
+  rows.push({ label:'Tanpa Pemilik', amount: exp.filter(t => !isKnownOwner(t.owner))
+    .reduce((s,t) => s + (Number(t.amount)||0), 0) });
+  const total = exp.reduce((s,t) => s + (Number(t.amount)||0), 0);
+
+  $('#ownerSumSub').textContent = viewedLabel() + ' · total ' + rp(total);
+  $('#ownerCards').innerHTML = rows.map(r => {
+    const col = r.label === 'Tanpa Pemilik'
+      ? { c:'text-slate-500', bg:'bg-slate-100' }
+      : ownerColor(r.label);
+    const pct = total > 0 ? Math.round(r.amount/total*100) : 0;
+    return '<div class="card rounded-2xl p-3.5 flex items-center justify-between gap-3">' +
+      '<div class="min-w-0">' +
+        '<div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider truncate">' + esc(r.label) + '</div>' +
+        '<div class="mt-0.5 text-lg font-bold ' + col.c + '">' + rp(r.amount) + '</div>' +
+        '<div class="text-[10px] text-slate-400">' + pct + '%</div>' +
+      '</div>' +
+      '<span class="' + col.bg + ' ' + col.c + ' w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0">' +
+        '<i class="fas ' + (r.label === 'Tanpa Pemilik' ? 'fa-user-slash' : 'fa-user') + '"></i>' +
+      '</span></div>';
+  }).join('');
+}
+
+function renderBudget(){
+  const rec = periodRec(state.activePeriod);
+  const budget = rec ? Number(rec.budget)||0 : 0;
+  const exp = totalBy(state.activePeriod,'pengeluaran');
+  const saldo = saldoAkhir(state.activePeriod);
+  $('#budgetPeriodLabel').textContent = '— ' + (rec ? rec.label : '');
+  $('#budgetInput').value = budget || '';
+  const pct = budget > 0 ? Math.min(exp/budget*100, 100) : 0;
+  const bar = $('#budgetBar');
+  bar.style.width = pct + '%';
+  bar.style.background = pct < 70 ? 'var(--emerald)' : pct < 90 ? 'var(--amber)' : 'var(--rose)';
+  $('#budgetText').textContent = budget > 0
+    ? 'Terpakai ' + rp(exp) + ' / ' + rp(budget) + ' (' + Math.round(pct) + '%)'
+    : 'Atur anggaran untuk melihat progress.';
+  const warn = $('#budgetWarn');
+  if (budget > 0 && exp > budget){
+    warn.textContent = 'Anggaran terlampaui ' + rp(exp - budget) + '.';
+    warn.classList.remove('hidden');
+  } else if (saldo < 0){
+    warn.textContent = '⚠ Saldo tidak cukup — pengeluaran melebihi sisa saldo bulan ini.';
+    warn.classList.remove('hidden');
+  } else warn.classList.add('hidden');
+  $('#setBudgetTemplateBtn').classList.toggle('hidden', budget <= 0);
+}
+
+function renderTable(){
+  const rows = viewedTransactions();
+  const q = $('#searchInput').value.trim().toLowerCase();
+  const cat = $('#categoryFilter').value;
+  const own = $('#ownerFilter').value;
+  const archived = isViewingArchive();
+
+  const shown = rows.filter(t => {
+    if (q && !String(t.description||'').toLowerCase().includes(q)) return false;
+    if (cat !== 'all' && t.category !== cat) return false;
+    if (own !== 'all'){
+      if (t.type === 'pemasukan') return false;          // pemilik hanya relevan untuk pengeluaran
+      if (own === 'unassigned') return !isKnownOwner(t.owner);
+      return isKnownOwner(t.owner) && String(t.owner).toLowerCase() === String(own).toLowerCase();
+    }
+    return true;
+  }).sort((a,b) => String(b.date).localeCompare(String(a.date)));
+
+  $('#txBody').innerHTML = shown.map(t => {
+    const income = t.type === 'pemasukan';
+    const owner = t.owner || '';
+    const known = isKnownOwner(owner);
+    const col = income ? { c:'bg-slate-100 text-slate-600' } : (known ? ownerColor(owner) : { c:'bg-slate-100 text-slate-600' });
+    const src = t.source === 'scan'
+      ? '<span class="inline-flex items-center gap-1 text-[10px] font-medium bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full"><i class="fas fa-microchip"></i>Scan</span>'
+      : '<span class="inline-flex items-center gap-1 text-[10px] font-medium bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full"><i class="fas fa-keyboard"></i>Manual</span>';
+    const locked = archived || t.period !== state.activePeriod;
+    const actions = locked
+      ? '<span class="text-slate-300" title="Periode ditutup — buka Perbaiki Arsip untuk mengubah"><i class="fas fa-lock"></i></span>'
+      : (t.locked
+        ? '<button data-undo-id="' + esc(t.id) + '" class="text-slate-400 hover:text-emerald-500" title="Batalkan void"><i class="fas fa-rotate-left"></i></button>'
+        : '<button data-void-id="' + esc(t.id) + '" class="text-slate-400 hover:text-amber-500" title="Batalkan (void)"><i class="fas fa-ban"></i></button>' +
+          '<button data-del-id="' + esc(t.id) + '" class="text-slate-400 hover:text-rose-500 ml-2" title="Hapus"><i class="fas fa-trash"></i></button>');
+    return '<tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors ' + (locked ? 'locked-row' : '') + '">' +
+      '<td class="py-2.5 px-3 text-[11px] text-slate-500 whitespace-nowrap">' + esc(t.date || '-') + '</td>' +
+      '<td class="py-2.5 px-3 text-xs font-medium text-slate-700">' + esc(t.description || '-') +
+        (t.catatan ? ' <span class="text-[10px] text-amber-600">' + esc(t.catatan) + '</span>' : '') + '</td>' +
+      '<td class="py-2.5 px-3 text-[11px] text-slate-500 hidden md:table-cell">' + esc(t.category || '-') + '</td>' +
+      '<td class="py-2.5 px-3"><span class="inline-flex text-[10px] font-medium px-1.5 py-0.5 rounded-full ' + col.c + '">' +
+        (income ? 'Pemasukan' : (owner ? esc(owner) : 'Tanpa Pemilik')) + '</span></td>' +
+      '<td class="py-2.5 px-3 hidden sm:table-cell">' + src + '</td>' +
+      '<td class="py-2.5 px-3 text-right text-xs font-semibold whitespace-nowrap ' + (income ? 'text-emerald-600' : 'text-rose-600') + '">' +
+        (income ? '+' : '−') + rp(t.amount) + '</td>' +
+      '<td class="py-2.5 px-3 text-right whitespace-nowrap">' + actions + '</td></tr>';
+  }).join('');
+
+  const empty = $('#tableEmpty');
+  empty.classList.toggle('hidden', shown.length > 0);
+  empty.textContent = isAllArchive()
+    ? 'Belum ada transaksi sama sekali.'
+    : (isViewingArchive()
+      ? 'Tidak ada transaksi pada ' + periodLabel(viewedPeriod()) + '.'
+      : 'Belum ada transaksi bulan ini. Tambah lewat form atau Scan Resi.');
+}
+
+function renderOwnerFilter(){
+  const sel = $('#ownerFilter');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="all">Semua Pemilik</option>' +
+    getOwners().map(o => '<option value="' + esc(o) + '">' + esc(o) + '</option>').join('') +
+    '<option value="unassigned">Tanpa Pemilik</option>';
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
+}
+function renderCategoryFilter(){
+  const sel = $('#categoryFilter');
+  const cur = sel.value;
+  const cats = [...new Set(state.transactions.concat(state.archived).map(t => t.category).filter(Boolean))];
+  sel.innerHTML = '<option value="all">Semua Kategori</option>' +
+    cats.map(c => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('');
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
+}
+function renderOwnerSelect(){
+  const sel = $('#txOwner');
+  const cur = sel.value;
+  sel.innerHTML = getOwners().map(o => '<option value="' + esc(o) + '">' + esc(o) + '</option>').join('');
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : (getOwners()[0] || '');
+}
+
+/* ---- Charts ---- */
+function destroyChart(name){
+  if (window[name] && typeof window[name].destroy === 'function') window[name].destroy();
+  window[name] = null;
+}
+function renderCharts(){
+  if (typeof Chart === 'undefined') return;
+  const catColors = ['#10b981','#f472b6','#3b82f6','#8b5cf6','#f59e0b','#6b7280','#84cc16','#14b8a6'];
+
+  const byCat = {};
+  viewedTransactions().filter(t => t.type === 'pengeluaran').forEach(t => {
+    const k = t.category || 'Lainnya';
+    byCat[k] = (byCat[k] || 0) + (Number(t.amount) || 0);
+  });
+  const labels = Object.keys(byCat);
+  destroyChart('doughnutChart');
+  window.doughnutChart = new Chart($('#doughnutChart').getContext('2d'), {
+    type:'doughnut',
+    data:{ labels, datasets:[{ data:labels.map(k => byCat[k]),
+      backgroundColor:labels.map((_,i) => catColors[i % catColors.length]) }] },
+    options:{ responsive:true, plugins:{ legend:{ position:'bottom', labels:{ boxWidth:12, font:{size:11} } },
+      tooltip:{ callbacks:{ label:c => c.label + ': ' + rp(c.raw) } } } }
+  });
+
+  const months = [];
+  for (let i = 5; i >= 0; i--) months.push(shiftMonths(nowPeriod(), -i));
+  const all = state.transactions.concat(state.archived);
+  const sum = (m, type) => all.filter(t => t.type === type && String(t.date||'').slice(0,7) === m)
+    .reduce((s,t) => s + (Number(t.amount)||0), 0);
+  destroyChart('barChart');
+  window.barChart = new Chart($('#barChart').getContext('2d'), {
+    type:'bar',
+    data:{ labels: months.map(m => MONTHS[Number(m.slice(5,7))-1].slice(0,3) + ' ' + m.slice(2,4)),
+      datasets:[
+        { label:'Pemasukan', data:months.map(m => sum(m,'pemasukan')), backgroundColor:'#10b981' },
+        { label:'Pengeluaran', data:months.map(m => sum(m,'pengeluaran')), backgroundColor:'#ef4444' }
+      ] },
+    options:{ responsive:true, plugins:{ legend:{ position:'bottom', labels:{ boxWidth:12, font:{size:11} } } },
+      scales:{ x:{ ticks:{ font:{size:10} } },
+        y:{ beginAtZero:true, ticks:{ font:{size:10}, callback:v => 'Rp ' + Number(v).toLocaleString('id-ID') } } } }
+  });
+}
+
+/* ---- Archive panel ---- */
+function renderArchivePanel(){
+  const panel = $('#archivePanel');
+  if (panel.classList.contains('hidden')) return;
+  const closed = sortedPeriods().filter(p => p.isArchived);
+  const all = sortedPeriods();
+
+  if (typeof Chart !== 'undefined'){
+    destroyChart('trendChart');
+    window.trendChart = new Chart($('#trendChart').getContext('2d'), {
+      type:'line',
+      data:{ labels: all.map(p => p.label),
+        datasets:[{ label:'Saldo akhir', data: all.map(p => saldoAkhir(p.period)),
+          borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.12)', fill:true,
+          tension:.3, pointRadius:3 }] },
+      options:{ responsive:true, plugins:{ legend:{ display:false } },
+        scales:{ y:{ ticks:{ font:{size:10}, callback:v => 'Rp ' + Number(v).toLocaleString('id-ID') } } } }
+    });
+  }
+
+  $('#periodList').innerHTML = closed.length ? closed.slice().reverse().map(p => {
+    const inc = totalBy(p.period,'pemasukan'), exp = totalBy(p.period,'pengeluaran');
+    const closing = saldoAkhir(p.period);
+    return '<div class="card rounded-xl p-3">' +
+      '<div class="flex items-center justify-between gap-2">' +
+        '<div class="min-w-0">' +
+          '<div class="text-sm font-semibold text-slate-700 truncate">' + esc(p.label) + '</div>' +
+          '<div class="text-[10px] text-slate-400">' + allTransactionsFor(p.period).length + ' transaksi' +
+            (p.catatan ? ' · ' + esc(p.catatan) : '') + '</div>' +
+        '</div>' +
+        '<div class="text-right flex-shrink-0">' +
+          '<div class="text-sm font-bold ' + (closing >= 0 ? 'text-emerald-600' : 'text-rose-600') + '">' +
+            (closing < 0 ? '−' : '') + rp(closing) + '</div>' +
+          '<div class="text-[10px] text-slate-400">dari ' + rp(p.saldoAwal) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="flex gap-3 mt-2 text-[10px] text-slate-500">' +
+        '<span class="text-emerald-600">+ ' + rp(inc) + '</span>' +
+        '<span class="text-rose-500">− ' + rp(exp) + '</span>' +
+        '<button data-fix-period="' + esc(p.period) + '" class="ml-auto text-amber-600 hover:underline">Perbaiki</button>' +
+      '</div></div>';
+  }).join('') : '<p class="text-sm text-slate-400 text-center py-6">Belum ada periode terarsip.</p>';
+}
+
+/* ---- Impact preview ---- */
+function renderImpact(){
+  const amt = Number($('#txAmount').value) || 0;
+  const el = $('#txImpact');
+  if (!amt){ el.textContent = ''; return; }
+  const closing = saldoAkhir(state.activePeriod);
+  const after = state.txType === 'pemasukan' ? closing + amt : closing - amt;
+  el.innerHTML = 'Setelah disimpan, saldo menjadi <b class="' + (after < 0 ? 'text-rose-600' : 'text-emerald-600') + '">' +
+    (after < 0 ? '−' : '') + rp(after) + '</b>' + (after < 0 ? ' (defisit)' : '') + '.';
+}
+
+/* =====================================================================
+   10. FORM
+   ===================================================================== */
+function setTxType(type){
+  state.txType = type;
+  writeLS(LS.txType, type);
+  const isExp = type === 'pengeluaran';
+  $('#txOwnerWrap').classList.toggle('hidden', !isExp);
+  $('#txSign').textContent = isExp ? '−' : '+';
+  $('#txSign').className = 'text-lg font-bold w-7 text-center ' + (isExp ? 'text-rose-500' : 'text-emerald-500');
+  $('#tabExpense').className = 'flex-1 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ' +
+    (isExp ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-50 text-slate-500 border-slate-200');
+  $('#tabIncome').className = 'flex-1 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ' +
+    (isExp ? 'bg-slate-50 text-slate-500 border-slate-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200');
+  const cats = isExp ? CAT_EXP : CAT_INC;
+  $('#txCategory').innerHTML = cats.map(c => '<option>' + esc(c) + '</option>').join('');
+  renderImpact();
+}
+function bindDateBounds(){
+  const p = state.activePeriod;
+  if (!p) return;
+  const input = $('#txDate');
+  input.min = p + '-01';
+  input.max = p + '-' + String(lastDayOf(p)).padStart(2,'0');
+  /* Nilai WAJIS di dalam [min,max]. Memakai todayISO() apa adanya bisa
+     menyodorkan tanggal di luar periode (mis. setelah tutup bulan manual),
+     dan input itu akan ditolak validateDate(). */
+  const today = todayISO();
+  const cur = String(input.value || '');
+  const inRange = v => v >= input.min && v <= input.max;
+  input.value = inRange(cur) ? cur : (inRange(today) ? today : input.min);
+}
+function submitTx(){
+  const desc = $('#txDesc').value.trim();
+  const amount = Number($('#txAmount').value);
+  const date = $('#txDate').value || todayISO();
+  const isExp = state.txType === 'pengeluaran';
+  const owner = isExp ? normalizeOwner($('#txOwner').value) : '';
+
+  if (!desc) return toast('Deskripsi transaksi wajib diisi','error');
+  if (!amount || amount <= 0) return toast('Nominal harus lebih dari 0','error');
+  if (isExp && !owner) return toast('Pemilih pengeluaran wajib diisi','error');
+
+  const v = validateDate(date);
+  if (!v.ok){
+    if (v.code === 'PAST'){
+      const period = date.slice(0,7);
+      confirmDialog('Transansi untuk bulan lalu?', v.message + ' Buka Perbaiki Arsip untuk menyimpan?', () => {
+        closeModal('#confirmModal');
+        openFixArchive(period, { type:state.txType, amount, description:desc, date, owner, category:$('#txCategory').value, source:'manual' });
+      });
+      return;
+    }
+    return toast(v.message,'error');
+  }
+
+  addTransaction({ type:state.txType, amount, description:desc,
+    category:$('#txCategory').value, date, source:'manual', owner });
+  $('#txDesc').value = '';
+  $('#txAmount').value = '';
+  renderImpact();
+  toast('Transaksi tersimpan','success');
+}
+
+/* =====================================================================
+   11. PERBAIKI ARSIP  (F-11)
+   ===================================================================== */
+function openFixArchive(period, seed){
+  state.fixPeriod = period;
+  const rec = periodRec(period);
+  const rows = allTransactionsFor(period).slice()
+    .sort((a,b) => String(b.date).localeCompare(String(a.date)));
+  $('#fixBody').innerHTML =
+    '<div class="text-xs text-slate-500 mb-2">Periode <b>' + esc(periodLabel(period)) + '</b> · saldo akhir saat ini ' +
+      '<b>' + rp(saldoAkhir(period)) + '</b></div>' +
+    (seed ? '<p class="text-[11px] text-amber-600 bg-amber-50 rounded-lg p-2 mb-2">Ada transaksi baru untuk disimpan ke periode ini.</p>' : '') +
+    (rows.length ? rows.map(t =>
+      '<div class="flex items-center gap-2 border border-slate-200 rounded-lg p-2">' +
+        '<div class="min-w-0 flex-1">' +
+          '<div class="text-xs font-medium truncate">' + esc(t.description) + '</div>' +
+          '<div class="text-[10px] text-slate-400">' + esc(t.date) + ' · ' + esc(t.owner || 'Tanpa Pemilik') + '</div>' +
+        '</div>' +
+        '<div class="text-xs font-semibold ' + (t.type === 'pemasukan' ? 'text-emerald-600' : 'text-rose-500') + '">' +
+          (t.type === 'pemasukan' ? '+' : '−') + rp(t.amount) + '</div>' +
+        '<button data-fix-del="' + esc(t.id) + '" class="text-slate-400 hover:text-rose-500"><i class="fas fa-trash"></i></button>' +
+      '</div>').join('') : '<p class="text-xs text-slate-400 text-center py-3">Belum ada transaksi.</p>') +
+    (seed ? '<button id="fixSaveSeed" class="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white font-medium">Simpan transaksi baru</button>' : '');
+  openModal('#fixModal');
+  const saveSeed = $('#fixSaveSeed');
+  if (saveSeed) saveSeed.addEventListener('click', () => {
+    const t = addTransactionToPeriod(seed, period);
+    if (t) toast('Transaksi tersimpan di ' + periodLabel(period),'success');
+  });
+}
+function addTransactionToPeriod(t, period){
+  if (!t) return null;
+  const amount = Number(t.amount) || 0;
+  if (!amount || amount <= 0) return null;
+  const rec = Object.assign({}, t, {
+    id: uid(), period, amount, date: String(t.date||'').slice(0,10),
+    type: t.type === 'pemasukan' ? 'pemasukan' : 'pengeluaran',
+    owner: t.type === 'pemasukan' ? '' : normalizeOwner(t.owner)
+  });
+  if (period === state.activePeriod) state.transactions.push(rec);
+  else state.archived.push(rec);
+  recomputeChainFrom(period);
+  renderAll();
+  renderArchivePanel();
+  openFixArchive(period);
+  return rec;
+}
+
+/* =====================================================================
+   12. EKSPOR / IMPOR
+   ===================================================================== */
+function download(name, content, type){
+  const blob = new Blob([content], { type });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function exportJSON(){
+  const payload = { app:'keuangan-bulanan', version:1, exportedAt:new Date().toISOString(),
+    activePeriod:state.activePeriod, budgetTemplate:state.budgetTemplate,
+    owners:state.owners, purgeKeep:state.purgeKeep,
+    periods:state.periods, transactions:state.transactions, archived:state.archived };
+  download('transaksi-keuangan.json', JSON.stringify(payload, null, 2), 'application/json');
+  toast('Data diekspor','success');
+}
+function exportCSV(){
+  const all = viewedTransactions()
+    .slice().sort((a,b) => String(a.date).localeCompare(String(b.date)));
+  const head = ['tanggal','periode','tipe','deskripsi','kategori','pemilik','nominal','sumber','catatan'];
+  const cell = v => {
+    let s = String(v ?? '');
+    if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return '"' + s.replace(/"/g,'""') + '"';
+  };
+  const rows = all.map(t => [t.date, t.period, t.type, t.description, t.category,
+    t.type === 'pemasukan' ? '' : (t.owner || ''), Number(t.amount)||0, t.source, t.catatan || ''].map(cell).join(';'));
+  download('transaksi-' + (isAllArchive() ? 'semua-arsip' : viewedPeriod()) + '.csv',
+    '﻿' + head.join(';') + '\n' + rows.join('\n'), 'text/csv;charset=utf-8');
+  toast('CSV diekspor','success');
+}
+function importJSON(file){
+  const reader = new FileReader();
+  reader.onload = e => {
+    let data;
+    try { data = JSON.parse(e.target.result); }
+    catch { return toast('File JSON tidak valid','error'); }
+    if (!data || !Array.isArray(data.periods)) return toast('Format tidak dikenali','error');
+    if (!confirmDialog) return;
+    confirmDialog('Impor data?','Seluruh data lokal akan diganti dengan isi file.', () => {
+      state.periods = data.periods.map(p => Object.assign(newPeriod(p.period, 0), p));
+      state.archived = Array.isArray(data.archived) ? data.archived : [];
+      state.transactions = Array.isArray(data.transactions) ? data.transactions : [];
+      if (Array.isArray(data.owners) && data.owners.length) state.owners = data.owners;
+      if (Number(data.budgetTemplate)) state.budgetTemplate = Number(data.budgetTemplate);
+      if (Number(data.purgeKeep)) state.purgeKeep = Number(data.purgeKeep);
+      state.activePeriod = data.activePeriod || nowPeriod();
+      if (!periodRec(state.activePeriod)){
+        state.periods.push(newPeriod(state.activePeriod, 0));
+      }
+      const earliest = sortedPeriods()[0].period;
+      recomputeChainFrom(earliest);   // jangan percaya angka hasil ekspor
+      state.viewPeriod = null;
+      renderAll();
+      toast('Data diimpor, saldo dihitung ulang','success');
+    });
+  };
+  reader.readAsText(file);
+}
+
+/* =====================================================================
+   13. SCAN RESI (Gemini)
+   ===================================================================== */
+function handleResiFile(file){
+  if (!file) return;
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type)) return toast('Hanya PNG/JPG/WEBP','error');
+  if (file.size > MAX_IMAGE_BYTES) return toast('Ukuran file maksimal 4 MB','error');
+  if (!state.apiKey) return toast('API Key Gemini belum diisi. Buka Pengaturan.','error');
+
+  $('#scanStatus').classList.remove('hidden');
+  $('#scanResult').classList.add('hidden');
+  $('#scanStatus').innerHTML = '<div class="flex items-center gap-2 text-sm text-emerald-600"><i class="fas fa-spinner fa-spin"></i> Menganalisis resi...</div>';
+
+  const reader = new FileReader();
+  reader.onload = e => callGemini(file, String(e.target.result).split(',')[1], 1);
+  reader.onerror = () => { $('#scanStatus').innerHTML = '<div class="text-sm text-rose-500">Gagal membaca file.</div>'; };
+  reader.readAsDataURL(file);
+}
+async function callGemini(file, base64, attempt){
+  const MAX = 3;
+  if (attempt > MAX){
+    $('#scanStatus').innerHTML = '<div class="text-sm text-rose-500">Semua percobaan gagal. Coba lagi nanti.</div>';
+    return;
+  }
+  $('#scanStatus').innerHTML = '<div class="flex items-center gap-2 text-sm text-emerald-600"><i class="fas fa-spinner fa-spin"></i> Analisis percobaan ' + attempt + '/' + MAX + '...</div>';
+  try {
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' +
+      encodeURIComponent(state.apiKey), {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        contents:[{ role:'user', parts:[
+          { inline_data:{ mime_type:file.type, data:base64 } },
+          { text:'Ekstrak informasi dari gambar resi ini. Kembalikan HANYA JSON valid dengan field: merchant, amount, date (YYYY-MM-DD), category, itemsSummary.' }
+        ]}],
+        systemInstruction:{ parts:[{ text:
+          'Anda adalah asisten ekstraksi data resi. Kembalikan JSON murni: {merchant, amount, date, category, itemsSummary}. ' +
+          'Kategori pilih dari: ' + CAT_EXP.join(', ') + '.' }] },
+        generationConfig:{ temperature:0, responseSchema:{ type:'OBJECT', properties:{
+          merchant:{type:'STRING'}, amount:{type:'NUMBER'}, date:{type:'STRING'},
+          category:{type:'STRING'}, itemsSummary:{type:'STRING'} },
+          required:['merchant','amount','date','category','itemsSummary'] } }
+      })});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    let json;
+    try { json = JSON.parse(text); }
+    catch { const m = text.match(/\{[\s\S]*\}/); if (!m) throw new Error('Respon bukan JSON'); json = JSON.parse(m[0]); }
+    if (!json.merchant || typeof json.amount !== 'number' || isNaN(json.amount)) throw new Error('JSON tidak lengkap');
+    if (!CAT_EXP.includes(json.category)) json.category = 'Lainnya';
+    showScanResult(json);
+  } catch (err){
+    const retryable = /429|500|503|network|Failed to fetch/.test(err.message);
+    if (retryable && attempt < MAX){
+      const wait = Math.pow(2, attempt) * 700;
+      $('#scanStatus').innerHTML = '<div class="text-sm text-amber-600"><i class="fas fa-hourglass-half mr-1"></i> Retry dalam ' + (wait/1000).toFixed(1) + 's...</div>';
+      await new Promise(r => setTimeout(r, wait));
+      return callGemini(file, base64, attempt + 1);
+    }
+    $('#scanStatus').innerHTML = '<div class="text-sm text-rose-500"><i class="fas fa-times-circle mr-1"></i> Gagal: ' + esc(err.message) + '</div>';
+  }
+}
+function showScanResult(d){
+  state.pending = d;
+  $('#scanStatus').classList.add('hidden');
+  const el = $('#scanResult');
+  el.classList.remove('hidden');
+  el.innerHTML =
+    '<div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">' +
+      '<div class="flex items-center gap-2 text-sm font-semibold text-emerald-700"><i class="fas fa-check-circle"></i> Data diekstrak</div>' +
+      '<div class="text-xs text-slate-700 space-y-0.5">' +
+        '<div><b>Merchant:</b> <span id="svMerchant"></span></div>' +
+        '<div><b>Nominal:</b> <span id="svAmount"></span></div>' +
+        '<div><b>Tanggal:</b> <span id="svDate"></span></div>' +
+        '<div><b>Ringkasan:</b> <span id="svSummary"></span></div>' +
+      '</div>' +
+      '<input id="svDateInput" type="date" class="rounded-lg border border-slate-300 px-3 py-2 text-xs w-full">' +
+      '<select id="svCat" class="rounded-lg border border-slate-300 px-3 py-2 text-xs w-full">' +
+        CAT_EXP.map(c => '<option' + (c === d.category ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
+      '</select>' +
+      '<select id="svOwner" class="rounded-lg border border-slate-300 px-3 py-2 text-xs w-full">' +
+        getOwners().map(o => '<option>' + esc(o) + '</option>').join('') +
+      '</select>' +
+      '<div class="flex gap-2 pt-1">' +
+        '<button id="svCancel" class="flex-1 rounded-lg bg-slate-100 px-3 py-2 text-xs hover:bg-slate-200">Batal</button>' +
+        '<button id="svSave" class="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs text-white font-medium">Simpan</button>' +
+      '</div>' +
+    '</div>';
+  // pasang teks via textContent — bukan innerHTML
+  $('#svMerchant').textContent = d.merchant;
+  $('#svAmount').textContent = rp(d.amount);
+  $('#svDate').textContent = d.date;
+  $('#svSummary').textContent = d.itemsSummary || '-';
+  $('#svDateInput').value = d.date;
+
+  $('#svCancel').addEventListener('click', () => { el.classList.add('hidden'); el.innerHTML = ''; });
+  $('#svSave').addEventListener('click', () => {
+    const owner = normalizeOwner($('#svOwner').value);
+    if (!owner) return toast('Pemilih pengeluaran wajib diisi','error');
+    const date = $('#svDateInput').value || d.date;
+    const v = validateDate(date);
+    if (!v.ok){
+      if (v.code === 'PAST'){
+        return confirmDialog('Transaksi resi untuk bulan lalu?', v.message, () => {
+          closeConfirm();
+          openFixArchive(date.slice(0,7), { type:'pengeluaran', amount:Number(d.amount),
+            description:d.merchant, date, owner, category:$('#svCat').value, source:'scan' });
+          el.classList.add('hidden'); el.innerHTML = '';
+        });
+      }
+      return toast(v.message,'error');
+    }
+    addTransaction({ type:'pengeluaran', amount:Number(d.amount), description:d.merchant,
+      category:$('#svCat').value, date, source:'scan', owner });
+    el.classList.add('hidden'); el.innerHTML = '';
+    toast('Transaksi hasil scan tersimpan','success');
+  });
+}
+
+/* =====================================================================
+   14. OWNER MANAGEMENT UI (F-15)
+   ===================================================================== */
+function renderOwnerChips(){
+  const owners = state.owners;
+  const usedInActive = new Set(state.transactions.map(t => t.owner).filter(Boolean));
+  $('#ownerChips').innerHTML = owners.map((o,i) => {
+    const col = ownerColor(o);
+    const used = usedInActive.has(o);
+    return '<div class="flex items-center gap-2 border border-slate-200 rounded-lg p-2">' +
+      '<span class="' + col.bg + ' ' + col.c + ' w-8 h-8 rounded-lg flex items-center justify-center text-xs">' +
+        '<i class="fas fa-user"></i></span>' +
+      '<span class="flex-1 text-sm font-medium truncate">' + esc(o) + '</span>' +
+      (used ? '<span class="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">dipakai</span>' : '') +
+      '<button data-owner-up="' + i + '" class="text-slate-300 hover:text-slate-600 ' + (i === 0 ? 'invisible' : '') + '"><i class="fas fa-chevron-up"></i></button>' +
+      '<button data-owner-down="' + i + '" class="text-slate-300 hover:text-slate-600 ' + (i === owners.length-1 ? 'invisible' : '') + '"><i class="fas fa-chevron-down"></i></button>' +
+      '<button data-owner-del="' + esc(o) + '" class="text-slate-300 hover:text-rose-500"><i class="fas fa-trash"></i></button>' +
+    '</div>';
+  }).join('');
+}
+function addOwner(){
+  const name = normalizeOwner($('#newOwnerInput').value);
+  if (!name) return toast('Nama pemilik tidak boleh kosong','error');
+  if (name.length > 24) return toast('Maksimal 24 karakter','error');
+  if (state.owners.some(o => o.toLowerCase() === name.toLowerCase()))
+    return toast('Pemilik "' + name + '" sudah ada','error');
+  state.owners.push(name);
+  persistOwners();
+  $('#newOwnerInput').value = '';
+  renderOwnerChips(); renderOwnerSelect(); renderOwnerFilter();
+  renderOwnerSummary(); renderImpact();
+  toast('Pemilik "' + name + '" ditambahkan','success');
+}
+function removeOwner(name){
+  const usedActive = state.transactions.some(t => isKnownOwner(t.owner) && String(t.owner).toLowerCase() === name.toLowerCase());
+  if (usedActive){
+    return confirmDialog('Pemilik "' + name + '" masih dipakai bulan ini.',
+      'Hapus dari daftar? Transaksi lamanya tetap tersimpan dan nilainya masuk ke "Tanpa Pemilik". Saldo tidak berubah.', () => {
+      doRemoveOwner(name);
+    });
+  }
+  doRemoveOwner(name);
+}
+function doRemoveOwner(name){
+  state.owners = state.owners.filter(o => o.toLowerCase() !== name.toLowerCase());
+  if (!state.owners.length) state.owners = ['Umum'];
+  persistOwners();
+  renderOwnerChips(); renderOwnerSelect(); renderOwnerFilter();
+  renderOwnerSummary(); renderImpact(); renderTable();
+  toast('Pemilik "' + name + '" dihapus — saldo tidak berubah','warning');
+}
+
+/* =====================================================================
+   15. SINKRONISASI (opsional)
+   ===================================================================== */
+function setSyncBadge(kind){
+  const el = $('#syncBadge');
+  el.classList.remove('hidden');
+  const map = {
+    connected:['bg-emerald-50 text-emerald-600','Tersinkron'],
+    offline:['bg-amber-50 text-amber-600','Offline (lokal)'],
+    local:['bg-slate-100 text-slate-500','Mode lokal'],
+    syncing:['bg-blue-50 text-blue-600','Sinkronisasi...']
+  };
+  const [cls,label] = map[kind] || map.local;
+  el.className = 'text-[11px] px-2 py-0.5 rounded-full ' + cls;
+  el.textContent = label;
+}
+async function syncNow(){
+  if (!state.apiUrl) return toast('URL database belum diisi di Pengaturan','error');
+  setSyncBadge('syncing');
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    const res = await fetch(state.apiUrl, { signal: ctrl.signal, headers:{'Content-Type':'application/json'} });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data || !data.ok) throw new Error(data?.error || 'Respon tidak valid');
+    if (Array.isArray(data.periods)) state.periods = data.periods;
+    if (Array.isArray(data.transactions)) state.transactions = data.transactions;
+    if (Array.isArray(data.archived)) state.archived = data.archived;
+    ensurePeriod();
+    persistAll(); renderAll();
+    setSyncBadge('connected');
+    toast('Tersinkron','success');
+  } catch (err){
+    setSyncBadge('offline');
+    toast('Gagal sinkron: ' + err.message + ' — data aman di lokal','error');
+  }
+}
+
+/* =====================================================================
+   16. SAMPLE DATA
+   ===================================================================== */
+function loadSample(){
+  const p = state.activePeriod;
+  const d = day => p + '-' + String(day).padStart(2,'0');
+  const samples = [
+    { type:'pemasukan',   amount:12000000, description:'Gaji Bulanan',  category:'Gaji & Utama',     date:d(1),  owner:'' },
+    { type:'pengeluaran', amount:35000,    description:'Makan Siang',    category:'Makanan & Minuman',date:d(2),  owner:'Kamek' },
+    { type:'pengeluaran', amount:125000,   description:'Beli Bahan Baku',category:'Belanja & Groceries',date:d(3),owner:'Mamak' },
+    { type:'pengeluaran', amount:45000,    description:'Uber',           category:'Transportasi',    date:d(4),  owner:'Kamek' },
+    { type:'pengeluaran', amount:89000,    description:'Tagihan Listrik',category:'Tagihan & Utilitas',date:d(5),owner:'Mamak' },
+    { type:'pengeluaran', amount:75000,    description:'Obat Kucing',    category:'Kesehatan',       date:d(6),  owner:'Kucing' },
+    { type:'pemasukan',   amount:5000000,  description:'Bonus Proyek',   category:'Bonus & Sampingan',date:d(10), owner:'' },
+    { type:'pengeluaran', amount:250000,   description:'Belanja Bulanan',category:'Hiburan & Gaya Hidup',date:d(15),owner:'Kamek' },
+    { type:'pengeluaran', amount:15000,    description:'Bensin Mobil',   category:'Transportasi',    date:d(20), owner:'Mamak' },
+  ].filter(s => validateDate(s.date).ok);
+  const rec = periodRec(p);
+  if (rec && !rec.budget) rec.budget = 5000000;
+  samples.forEach(addTransaction);
+  if (rec) rec.budget = 5000000;
+  persistAll(); renderAll();
+  toast('Data contoh dimuat','success');
+}
+
+/* =====================================================================
+   17. EVENT WIRING
+   ===================================================================== */
+function bind(){
+  $('#tabExpense').addEventListener('click', () => setTxType('pengeluaran'));
+  $('#tabIncome').addEventListener('click', () => setTxType('pemasukan'));
+  $('#addTxBtn').addEventListener('click', submitTx);
+  $('#txAmount').addEventListener('input', renderImpact);
+
+  $('#periodFilter').addEventListener('change', e => {
+    const v = e.target.value;
+    if (v === 'active'){ state.viewPeriod = null; }
+    else if (v === 'all'){ state.viewPeriod = 'all'; }
+    else { state.viewPeriod = v; }
+    renderAll();
+  });
+
+  $('#saveBudgetBtn').addEventListener('click', () => {
+    const rec = periodRec(state.activePeriod);
+    if (!rec) return;
+    rec.budget = Number($('#budgetInput').value) || 0;
+    persistAll(); renderAll();
+    toast('Anggaran ' + rec.label + ' disimpan','success');
+  });
+  $('#setBudgetTemplateBtn').addEventListener('click', () => {
+    const rec = periodRec(state.activePeriod);
+    state.budgetTemplate = rec ? rec.budget : 0;
+    writeLS(LS.budgetTemplate, String(state.budgetTemplate));
+    toast('Jadikan default bulan depan','success');
+  });
+
+  $('#searchInput').addEventListener('input', renderTable);
+  $('#categoryFilter').addEventListener('change', renderTable);
+  $('#ownerFilter').addEventListener('change', renderTable);
+  $('#exportBtn').addEventListener('click', exportJSON);
+  $('#csvBtn').addEventListener('click', exportCSV);
+
+  $('#txBody').addEventListener('click', e => {
+    const del = e.target.closest('[data-del-id]');
+    if (del) return deleteTransaction(del.dataset.delId);
+    const vd = e.target.closest('[data-void-id]');
+    if (vd) return voidTransaction(vd.dataset.voidId);
+    const un = e.target.closest('[data-undo-id]');
+    if (un){
+      const t = state.transactions.find(x => x.id === un.dataset.undoId);
+      if (t){ t.type = t.type === 'pemasukan' ? 'pengeluaran' : 'pemasukan';
+        t.locked = false; t.catatan = ''; persistAll(); renderAll(); toast('Void dibatalkan'); }
+    }
+  });
+
+  // owners
+  $('#manageOwnersBtn').addEventListener('click', () => { renderOwnerChips(); openModal('#ownersModal'); });
+  $('#closeOwnersBtn').addEventListener('click', () => closeModal('#ownersModal'));
+  $('#addOwnerBtn').addEventListener('click', addOwner);
+  $('#newOwnerInput').addEventListener('keydown', e => { if (e.key === 'Enter') addOwner(); });
+  $('#ownerChips').addEventListener('click', e => {
+    const up = e.target.closest('[data-owner-up]');
+    const dn = e.target.closest('[data-owner-down]');
+    const rm = e.target.closest('[data-owner-del]');
+    if (up){
+      const i = Number(up.dataset.ownerUp);
+      if (i > 0){ [state.owners[i-1], state.owners[i]] = [state.owners[i], state.owners[i-1]]; }
+    } else if (dn){
+      const i = Number(dn.dataset.ownerDown);
+      if (i < state.owners.length-1){ [state.owners[i+1], state.owners[i]] = [state.owners[i], state.owners[i+1]]; }
+    } else if (rm){ return removeOwner(rm.dataset.ownerDel); }
+    else return;
+    persistOwners();
+    writeJSON('fin_owner_colors', {});
+    renderOwnerChips(); renderOwnerSelect(); renderOwnerFilter(); renderOwnerSummary();
+  });
+
+  // archive
+  $('#archiveBtn').addEventListener('click', () => {
+    const p = $('#archivePanel');
+    const opening = p.classList.contains('hidden');
+    p.classList.toggle('hidden', !opening);
+    if (opening) renderArchivePanel();
+  });
+  $('#closeArchiveBtn').addEventListener('click', () => $('#archivePanel').classList.add('hidden'));
+  $('#periodList').addEventListener('click', e => {
+    const b = e.target.closest('[data-fix-period]');
+    if (b) openFixArchive(b.dataset.fixPeriod);
+  });
+  $('#closeFixBtn').addEventListener('click', () => closeModal('#fixModal'));
+  $('#fixBody').addEventListener('click', e => {
+    const b = e.target.closest('[data-fix-del]');
+    if (!b) return;
+    const period = state.fixPeriod;
+    confirmDialog('Hapus transaksi arsip?','Saldo ' + periodLabel(period) + ' dan periode setelahnya akan disesuaikan.', () => {
+      closeConfirm();
+      state.archived = state.archived.filter(t => t.id !== b.dataset.fixDel);
+      recomputeChainFrom(period);
+      renderAll(); renderArchivePanel(); openFixArchive(period);
+      toast('Arsip diperbarui','success');
+    });
+  });
+
+  // settings
+  $('#settingsBtn').addEventListener('click', () => {
+    $('#apiUrlInput').value = state.apiUrl;
+    $('#apiKeyInput').value = state.apiKey;
+    $('#purgeKeepInput').value = state.purgeKeep;
+    openModal('#settingsModal');
+  });
+  $('#closeSettingsBtn').addEventListener('click', () => closeModal('#settingsModal'));
+  $('#apiUrlInput').addEventListener('change', e => {
+    state.apiUrl = e.target.value.trim();
+    writeLS(LS.apiUrl, state.apiUrl);
+    if (state.apiUrl) syncNow(); else setSyncBadge('local');
+  });
+  $('#apiKeyInput').addEventListener('change', e => {
+    state.apiKey = e.target.value.trim();
+    writeLS(LS.apiKey, state.apiKey);
+  });
+  $('#purgeKeepInput').addEventListener('change', e => {
+    state.purgeKeep = Math.max(1, Number(e.target.value) || 12);
+    persistAll(); applyPurgePolicy(); persistAll(); renderAll();
+  });
+  $('#importBtn').addEventListener('click', () => $('#importFile').click());
+  $('#importFile').addEventListener('change', e => {
+    if (e.target.files[0]) importJSON(e.target.files[0]);
+    e.target.value = '';
+  });
+  $('#loadSampleBtn').addEventListener('click', () => { closeModal('#settingsModal'); loadSample(); });
+  $('#resetDataBtn').addEventListener('click', () => {
+    confirmDialog('Reset semua data?','Semua transaksi, arsip, dan saldo awal akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.', () => {
+      ['periods','archived','transactions','owners','budgetTemplate','purgeKeep','activePeriod','txType']
+        .forEach(k => { try { localStorage.removeItem(LS[k]); } catch {} });
+      try { localStorage.removeItem('fin_owner_colors'); } catch {}
+      state.periods = []; state.archived = []; state.transactions = [];
+      state.owners = [...DEFAULT_OWNERS]; state.budgetTemplate = 0; state.purgeKeep = 12;
+      state.activePeriod = null; state.viewPeriod = null;
+      ensurePeriod(); renderAll(); closeModal('#settingsModal');
+      toast('Semua data direset','success');
+    });
+  });
+
+  // rollover
+  $('#rolloverOkBtn').addEventListener('click', () => {
+    const v = Number($('#rolloverAwal').value);
+    const p = periodRec(state.activePeriod);
+    if (p && Number.isFinite(v)) p.saldoAwal = v;
+    persistAll(); renderAll();
+    closeModal('#rolloverModal');
+  });
+
+  // confirm
+  $('#confirmYes').addEventListener('click', () => { const cb = confirmCb; closeConfirm(); if (cb) cb(); });
+  $('#confirmNo').addEventListener('click', closeConfirm);
+
+  // sync
+  $('#syncBtn').addEventListener('click', syncNow);
+
+  // scan drop
+  const drop = $('#dropArea');
+  drop.addEventListener('click', () => $('#resiUpload').click());
+  $('#resiUpload').addEventListener('change', e => { handleResiFile(e.target.files[0]); e.target.value = ''; });
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('border-emerald-500'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('border-emerald-500'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('border-emerald-500');
+    handleResiFile(e.dataTransfer.files[0]);
+  });
+
+  // midnight + multi-tab
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (rolloverIfNeeded()) renderAll();
+  });
+  window.addEventListener('storage', e => {
+    if (!e.key || !Object.values(LS).includes(e.key)) return;
+    loadState(); ensurePeriod(); renderAll();
+  });
+}
+let rolloverShownFor = null;
+function rolloverIfNeeded(){
+  const target = nowPeriod();
+  if (state.activePeriod === target && periodRec(target)) return false;
+  const prev = sortedPeriods().filter(p => p.period < target).pop();
+  const carry = ensurePeriod();
+  if (rolloverShownFor === target){
+    renderAll();
+    return true;
+  }
+  rolloverShownFor = target;
+  const rec = periodRec(target);
+  $('#rolloverTitle').textContent = 'Bulan baru dimulai — ' + (rec ? rec.label : periodLabel(target));
+  $('#rollPrev').textContent = rp(carry);
+  $('#rollCarry').textContent = rp(carry);
+  $('#rollCarry').className = 'font-semibold ' + (carry < 0 ? 'text-rose-600' : 'text-emerald-600');
+  $('#rolloverAwal').value = carry;
+  openModal('#rolloverModal');
+  if (prev) prev.catatan = prev.catatan || 'ditutup otomatis';
+  renderAll();
+  return true;
+}
+
+/* =====================================================================
+   18. INIT
+   ===================================================================== */
+function init(){
+  loadState();
+  renderOwnerFilter();
+  renderCategoryFilter();
+  renderOwnerSelect();
+  bind();
+  setTxType(state.txType);
+  /* rolloverIfNeeded() harus lebih dulu: di first-run state.activePeriod masih
+     null, sehingga bindDateBounds() akan menulis min="null-01"/max="null-NaN". */
+  const rolled = rolloverIfNeeded();
+  bindDateBounds();
+  if (!rolled) renderAll();
+  if (state.apiUrl) syncNow(); else setSyncBadge('local');
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
