@@ -29,14 +29,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Hanya index.html dan .nojekyll yang ditayangkan. Berkas test, schema
-      # database, dan kode backend sengaja tidak ikut: repository ini publik,
-      # dan tidak perlu membocorkan struktur internal lewat URL yang ditebak.
+      # Jangan ubah jadi `cp .` — repo ini publik, dan backend + berkas test
+      # tidak boleh terekspos di URL yang bisa ditebak.
       - name: Siapkan situs
         run: |
           mkdir -p _site
-          cp index.html _site/
-          cp .nojekyll _site/
+          cp index.html favicon.svg .nojekyll _site/
 
       - name: Unggah artifact
         uses: actions/upload-pages-artifact@v5
