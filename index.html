@@ -1543,6 +1543,7 @@ function rolloverIfNeeded(){
   if (state.activePeriod === target && periodRec(target)) return false;
   const prev = sortedPeriods().filter(p => p.period < target).pop();
   const carry = ensurePeriod();
+  if (!prev) return false;
   if (rolloverShownFor === target){
     renderAll();
     return true;
