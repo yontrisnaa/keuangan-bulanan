@@ -85,8 +85,18 @@ SYNC_SECRET=<rahasia panjang>
 
 Sudah aktif di **GitHub Pages**: https://yontrisnaa.github.io/keuangan-bulanan
 
-Deploy otomatis dari branch `main` setiap ada push — tanpa action, tanpa build
-step. File `.nojekyll` mencegah Jekyll ikut memproses berkas saat deploy.
+Deploy berjalan lewat workflow `.github/workflows/pages.yml`: setiap ada push ke
+`main`, workflow itu mengunggah `index.html` dan `.nojekyll` ke Pages. Tidak ada
+build step — semua aset sudah diambil dari CDN, jadi yang perlu ditayangkan
+hanya satu berkas HTML itu.
+
+Berkas test, schema database, dan `api/sync.js` sengaja **tidak** ikut diunggah,
+meski tetap ada di repository: supaya struktur internal tidak terekspos lewat
+URL yang bisa ditebak orang lain.
+
+File `.nojekyll` praktis sudah tak kepakai sekarang, karena Jekyll tidak
+ikut campur saat artifact diunggah. Tetap disertakan agar repo ini bisa
+dipindah ke mode "deploy from branch" tanpa perubahan.
 
 Repository ini **public**, bukan lagi private. Itu syarat GitHub Pages pada
 paket Free, dan konsekuensinya: seluruh kode di sini — termasuk `api/sync.js`
