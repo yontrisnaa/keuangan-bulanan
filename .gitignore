@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+.playwright-mcp/
+
+# Rahasia syncronisasi hanya boleh lewat environment variable server-side,
+# jangan pernah di-commit.
+.env
+.env.*
+
+*.log
