@@ -83,16 +83,18 @@ SYNC_SECRET=<rahasia panjang>
 
 ## Hosting
 
-Repo ini **private**. GitHub Pages pada paket Free hanya tersedia untuk repo
-publik, jadi Pages bukan pilihan tanpa mengorbankan privatisasi.
+Sudah aktif di **GitHub Pages**: https://yontrisnaa.github.io/keuangan-bulanan
 
-| Opsi | Biaya | Repo tetap private | Catatan |
-|---|---|---|---|
-| **Cloudflare Pages** | Gratis | Ya | Connect langsung ke repo ini; tanpa backend |
-| GitHub Pages | Gratis | Tidak | Butuh file `.nojekyll` |
-| GitHub Pro | Berbayar | Ya | Pages untuk repo private |
+Deploy otomatis dari branch `main` setiap ada push — tanpa action, tanpa build
+step. File `.nojekyll` mencegah Jekyll ikut memproses berkas saat deploy.
 
-Semua opsi ini bersifat statis — `api/sync.js` tidak akan berjalan di sana.
+Repository ini **public**, bukan lagi private. Itu syarat GitHub Pages pada
+paket Free, dan konsekuensinya: seluruh kode di sini — termasuk `api/sync.js`
+dan `db/schema.sql` — sekarang bisa dibaca siapa saja. Yang tetap tidak publik
+adalah datamu, karena semuanya hanya ada di `localStorage`.
+
+Halaman Pages bersifat statis, jadi `api/sync.js` tidak berjalan di sana. Berkas
+itu tetap berguna sebagai referensi bagi yang ingin men-deploy backend sendiri.
 
 ## Scan struk (opsional)
 
